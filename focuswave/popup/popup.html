@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=360">
+  <link rel="stylesheet" href="popup.css">
+  <title>FocusWave</title>
+</head>
+<body>
+  <div class="container">
+    <header class="header">
+      <h1 class="title">FOCUSWAVE</h1>
+      <span class="subtitle">Binaural Beats Generator</span>
+    </header>
+
+    <div class="card presets-card">
+      <div class="presets-grid">
+        <button class="preset-btn" data-preset="delta">
+          <span class="preset-name">Delta</span>
+          <span class="preset-hz">2 Hz</span>
+        </button>
+        <button class="preset-btn" data-preset="theta">
+          <span class="preset-name">Theta</span>
+          <span class="preset-hz">6 Hz</span>
+        </button>
+        <button class="preset-btn" data-preset="alpha">
+          <span class="preset-name">Alpha</span>
+          <span class="preset-hz">10 Hz</span>
+        </button>
+        <button class="preset-btn" data-preset="beta">
+          <span class="preset-name">Beta</span>
+          <span class="preset-hz">14 Hz</span>
+        </button>
+        <button class="preset-btn" data-preset="gamma">
+          <span class="preset-name">Gamma</span>
+          <span class="preset-hz">40 Hz</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="state-display">
+      <span class="state-preset" id="statePreset">Beta</span>
+      <span class="state-separator">&middot;</span>
+      <span class="state-freq" id="stateFreq">14 Hz</span>
+      <div class="state-label" id="stateLabel">Concentration</div>
+    </div>
+
+    <div class="visualizer-container">
+      <canvas id="visualizer" width="320" height="56"></canvas>
+    </div>
+
+    <button class="play-btn" id="playBtn">
+      <svg class="play-icon" id="playIcon" viewBox="0 0 24 24" width="28" height="28">
+        <polygon points="6,3 20,12 6,21" fill="currentColor"/>
+      </svg>
+      <svg class="pause-icon hidden" id="pauseIcon" viewBox="0 0 24 24" width="28" height="28">
+        <rect x="5" y="3" width="4" height="18" rx="1" fill="currentColor"/>
+        <rect x="15" y="3" width="4" height="18" rx="1" fill="currentColor"/>
+      </svg>
+    </button>
+
+    <div class="slider-group">
+      <div class="slider-row">
+        <label class="slider-label">Volume</label>
+        <input type="range" class="slider" id="volumeSlider" min="0" max="100" value="30">
+        <span class="slider-value" id="volumeValue">30%</span>
+      </div>
+      <div class="slider-row">
+        <label class="slider-label">Carrier</label>
+        <input type="range" class="slider" id="carrierSlider" min="150" max="300" value="200">
+        <span class="slider-value" id="carrierValue">200 Hz</span>
+      </div>
+    </div>
+
+    <div class="timer-section">
+      <label class="timer-label">Timer</label>
+      <div class="timer-buttons">
+        <button class="timer-btn" data-minutes="15">15m</button>
+        <button class="timer-btn" data-minutes="25">25m</button>
+        <button class="timer-btn" data-minutes="45">45m</button>
+        <button class="timer-btn" data-minutes="60">60m</button>
+        <button class="timer-btn active" data-minutes="0">OFF</button>
+      </div>
+      <div class="timer-display hidden" id="timerDisplay">
+        <span id="timerCountdown">00:00</span>
+      </div>
+    </div>
+
+    <div class="headphone-notice hidden" id="headphoneNotice">
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+        <path d="M12 1a9 9 0 0 0-9 9v7a3 3 0 0 0 3 3h1a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2H5v-2a7 7 0 1 1 14 0v2h-2a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h1a3 3 0 0 0 3-3v-7a9 9 0 0 0-9-9z"/>
+      </svg>
+      <span>Headphones recommended for binaural effect</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

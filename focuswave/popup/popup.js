@@ -1,0 +1,322 @@
+// FocusWave - Popup UI Logic
+
+const PRESET_LABELS = {
+  delta: { name: 'Delta', hz: '2 Hz', label: 'Deep Relaxation' },
+  theta: { name: 'Theta', hz: '6 Hz', label: 'Meditation' },
+  alpha: { name: 'Alpha', hz: '10 Hz', label: 'Calm Focus' },
+  beta: { name: 'Beta', hz: '14 Hz', label: 'Concentration' },
+  gamma: { name: 'Gamma', hz: '40 Hz', label: 'Peak Performance' }
+};
+
+// --- DOM Elements ---
+const presetBtns = document.querySelectorAll('.preset-btn');
+const playBtn = document.getElementById('playBtn');
+const playIcon = document.getElementById('playIcon');
+const pauseIcon = document.getElementById('pauseIcon');
+const volumeSlider = document.getElementById('volumeSlider');
+const volumeValue = document.getElementById('volumeValue');
+const carrierSlider = document.getElementById('carrierSlider');
+const carrierValue = document.getElementById('carrierValue');
+const timerBtns = document.querySelectorAll('.timer-btn');
+const timerDisplay = document.getElementById('timerDisplay');
+const timerCountdown = document.getElementById('timerCountdown');
+const headphoneNotice = document.getElementById('headphoneNotice');
+const statePreset = document.getElementById('statePreset');
+const stateFreq = document.getElementById('stateFreq');
+const stateLabel = document.getElementById('stateLabel');
+const canvas = document.getElementById('visualizer');
+const canvasCtx = canvas.getContext('2d');
+
+// --- State ---
+let state = {
+  preset: 'beta',
+  beatFreq: 14,
+  volume: 0.3,
+  carrierFreq: 200,
+  isPlaying: false,
+  timerMinutes: 0,
+  timerEndTime: null
+};
+
+let timerInterval = null;
+let headphoneTimeout = null;
+let hasShownHeadphones = false;
+
+// --- Messaging ---
+function sendMessage(type, payload = {}) {
+  return chrome.runtime.sendMessage({ type, payload });
+}
+
+// --- Initialize ---
+async function init() {
+  const savedState = await sendMessage('GET_STATE');
+  if (savedState) {
+    state = { ...state, ...savedState };
+  }
+  renderAll();
+  startVisualizer();
+
+  if (state.timerEndTime && state.timerEndTime > Date.now()) {
+    startTimerDisplay();
+  }
+}
+
+// --- Render ---
+function renderAll() {
+  renderPresets();
+  renderPlayState();
+  renderSliders();
+  renderTimer();
+  renderStateDisplay();
+}
+
+function renderPresets() {
+  presetBtns.forEach(btn => {
+    const preset = btn.dataset.preset;
+    btn.classList.toggle('active', preset === state.preset);
+  });
+}
+
+function renderPlayState() {
+  if (state.isPlaying) {
+    playIcon.classList.add('hidden');
+    pauseIcon.classList.remove('hidden');
+    playBtn.classList.add('playing');
+  } else {
+    playIcon.classList.remove('hidden');
+    pauseIcon.classList.add('hidden');
+    playBtn.classList.remove('playing');
+  }
+}
+
+function renderSliders() {
+  volumeSlider.value = Math.round(state.volume * 100);
+  volumeValue.textContent = Math.round(state.volume * 100) + '%';
+  carrierSlider.value = state.carrierFreq;
+  carrierValue.textContent = state.carrierFreq + ' Hz';
+}
+
+function renderTimer() {
+  timerBtns.forEach(btn => {
+    const minutes = parseInt(btn.dataset.minutes);
+    btn.classList.toggle('active', minutes === state.timerMinutes);
+  });
+
+  if (state.timerEndTime && state.timerEndTime > Date.now()) {
+    timerDisplay.classList.remove('hidden');
+  } else {
+    timerDisplay.classList.add('hidden');
+  }
+}
+
+function renderStateDisplay() {
+  const info = PRESET_LABELS[state.preset];
+  if (info) {
+    statePreset.textContent = info.name;
+    stateFreq.textContent = info.hz;
+    stateLabel.textContent = info.label;
+  }
+}
+
+// --- Event Handlers ---
+
+// Preset buttons
+presetBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const preset = btn.dataset.preset;
+    if (preset === state.preset) return;
+
+    state.preset = preset;
+    const info = PRESET_LABELS[preset];
+    state.beatFreq = parseFloat(info.hz);
+    renderPresets();
+    renderStateDisplay();
+    await sendMessage('SET_PRESET', { preset });
+  });
+});
+
+// Play/Pause
+playBtn.addEventListener('click', async () => {
+  if (state.isPlaying) {
+    state.isPlaying = false;
+    renderPlayState();
+    await sendMessage('PAUSE');
+    stopTimerDisplay();
+  } else {
+    state.isPlaying = true;
+    renderPlayState();
+    await sendMessage('PLAY');
+    showHeadphoneNotice();
+  }
+});
+
+// Volume slider
+volumeSlider.addEventListener('input', () => {
+  const vol = parseInt(volumeSlider.value);
+  state.volume = vol / 100;
+  volumeValue.textContent = vol + '%';
+  sendMessage('SET_VOLUME', { volume: state.volume });
+});
+
+// Carrier frequency slider
+carrierSlider.addEventListener('input', () => {
+  const freq = parseInt(carrierSlider.value);
+  state.carrierFreq = freq;
+  carrierValue.textContent = freq + ' Hz';
+  sendMessage('SET_CARRIER', { carrierFreq: freq });
+});
+
+// Timer buttons
+timerBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    const minutes = parseInt(btn.dataset.minutes);
+    state.timerMinutes = minutes;
+
+    if (minutes > 0) {
+      state.timerEndTime = Date.now() + minutes * 60 * 1000;
+      await sendMessage('SET_TIMER', { minutes });
+      startTimerDisplay();
+    } else {
+      state.timerEndTime = null;
+      await sendMessage('CLEAR_TIMER');
+      stopTimerDisplay();
+    }
+
+    renderTimer();
+  });
+});
+
+// --- Headphone Notice ---
+function showHeadphoneNotice() {
+  if (hasShownHeadphones) return;
+  hasShownHeadphones = true;
+
+  headphoneNotice.classList.remove('hidden');
+  headphoneNotice.classList.remove('fade-out');
+
+  clearTimeout(headphoneTimeout);
+  headphoneTimeout = setTimeout(() => {
+    headphoneNotice.classList.add('fade-out');
+    setTimeout(() => {
+      headphoneNotice.classList.add('hidden');
+    }, 1000);
+  }, 3000);
+}
+
+// --- Timer Display ---
+function startTimerDisplay() {
+  timerDisplay.classList.remove('hidden');
+  updateTimerCountdown();
+  clearInterval(timerInterval);
+  timerInterval = setInterval(updateTimerCountdown, 1000);
+}
+
+function stopTimerDisplay() {
+  clearInterval(timerInterval);
+  timerInterval = null;
+  timerDisplay.classList.add('hidden');
+  state.timerMinutes = 0;
+  state.timerEndTime = null;
+  renderTimer();
+}
+
+function updateTimerCountdown() {
+  if (!state.timerEndTime) {
+    stopTimerDisplay();
+    return;
+  }
+
+  const remaining = Math.max(0, state.timerEndTime - Date.now());
+  if (remaining <= 0) {
+    stopTimerDisplay();
+    // Refresh state from background
+    sendMessage('GET_STATE').then(s => {
+      if (s) {
+        state = { ...state, ...s };
+        renderAll();
+      }
+    });
+    return;
+  }
+
+  const mins = Math.floor(remaining / 60000);
+  const secs = Math.floor((remaining % 60000) / 1000);
+  timerCountdown.textContent =
+    String(mins).padStart(2, '0') + ':' + String(secs).padStart(2, '0');
+}
+
+// --- Sine Wave Visualizer ---
+let animationId = null;
+
+function startVisualizer() {
+  if (animationId) return;
+  drawWave(0);
+}
+
+function drawWave(timestamp) {
+  const width = canvas.width;
+  const height = canvas.height;
+  const dpr = window.devicePixelRatio || 1;
+
+  // Handle DPR on first frame
+  if (canvas.width === 320) {
+    canvas.width = 320 * dpr;
+    canvas.height = 56 * dpr;
+    canvas.style.width = '320px';
+    canvas.style.height = '56px';
+    canvasCtx.scale(dpr, dpr);
+  }
+
+  const w = 320;
+  const h = 56;
+
+  canvasCtx.clearRect(0, 0, w, h);
+
+  // Draw sine wave
+  const amplitude = state.isPlaying ? (state.volume * h * 0.35 + 2) : 2;
+  const waveFreq = 0.04;
+  const speed = timestamp * 0.002;
+
+  // Glow effect
+  canvasCtx.shadowBlur = state.isPlaying ? 14 : 0;
+  canvasCtx.shadowColor = '#f5b942';
+
+  // Create gradient stroke
+  const gradient = canvasCtx.createLinearGradient(0, 0, w, 0);
+  gradient.addColorStop(0, '#f5b942');
+  gradient.addColorStop(0.5, '#a78bfa');
+  gradient.addColorStop(1, '#f5b942');
+
+  canvasCtx.beginPath();
+  canvasCtx.strokeStyle = gradient;
+  canvasCtx.lineWidth = state.isPlaying ? 2 : 1;
+
+  for (let x = 0; x <= w; x++) {
+    const y = h / 2 + Math.sin(x * waveFreq + speed) * amplitude;
+    if (x === 0) canvasCtx.moveTo(x, y);
+    else canvasCtx.lineTo(x, y);
+  }
+
+  canvasCtx.stroke();
+
+  // Second wave (subtle, offset)
+  if (state.isPlaying) {
+    canvasCtx.beginPath();
+    canvasCtx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
+    canvasCtx.lineWidth = 1;
+    canvasCtx.shadowBlur = 0;
+
+    for (let x = 0; x <= w; x++) {
+      const y = h / 2 + Math.sin(x * waveFreq * 1.3 + speed * 0.7) * amplitude * 0.5;
+      if (x === 0) canvasCtx.moveTo(x, y);
+      else canvasCtx.lineTo(x, y);
+    }
+    canvasCtx.stroke();
+  }
+
+  canvasCtx.shadowBlur = 0;
+  animationId = requestAnimationFrame(drawWave);
+}
+
+// --- Init ---
+init();
