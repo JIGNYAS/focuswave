@@ -26,6 +26,14 @@ const stateFreq = document.getElementById('stateFreq');
 const stateLabel = document.getElementById('stateLabel');
 const canvas = document.getElementById('visualizer');
 const canvasCtx = canvas.getContext('2d');
+const proBadge        = document.getElementById('proBadge');
+const upgradeLink     = document.getElementById('upgradeLink');
+const upgradeModal    = document.getElementById('upgradeModal');
+const modalClose      = document.getElementById('modalClose');
+const licenseKeyInput = document.getElementById('licenseKeyInput');
+const activateBtn     = document.getElementById('activateBtn');
+const modalStatus     = document.getElementById('modalStatus');
+const carrierProLabel = document.getElementById('carrierProLabel');
 
 // --- State ---
 let state = {
@@ -35,7 +43,9 @@ let state = {
   carrierFreq: 200,
   isPlaying: false,
   timerMinutes: 0,
-  timerEndTime: null
+  timerEndTime: null,
+  isPro: false,
+  licenseKey: null
 };
 
 let timerInterval = null;
@@ -45,6 +55,18 @@ let hasShownHeadphones = false;
 // --- Messaging ---
 function sendMessage(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, payload });
+}
+
+// --- License Validation ---
+// Key format: FWPRO-[DATA8]-[CHECK4]
+// CHECK4 = ((sum_of_charCodes(DATA8) * 31) % 65536).toString(16).toUpperCase().padStart(4,'0')
+function validateLicenseKey(raw) {
+  const key = raw.trim().toUpperCase();
+  const match = key.match(/^FWPRO-([A-Z0-9]{8})-([A-Z0-9]{4})$/);
+  if (!match) return false;
+  const sum = match[1].split('').reduce((a, c) => a + c.charCodeAt(0), 0);
+  const expected = ((sum * 31) % 65536).toString(16).toUpperCase().padStart(4, '0');
+  return match[2] === expected;
 }
 
 // --- Initialize ---
@@ -68,6 +90,7 @@ function renderAll() {
   renderSliders();
   renderTimer();
   renderStateDisplay();
+  renderTier();
 }
 
 function renderPresets() {
@@ -118,12 +141,43 @@ function renderStateDisplay() {
   }
 }
 
+const LOCKED_PRESETS = ['delta', 'theta', 'gamma'];
+const LOCKED_MINUTES = [45, 60];
+
+function renderTier() {
+  const pro = state.isPro;
+  proBadge.classList.toggle('hidden', !pro);
+  upgradeLink.classList.toggle('hidden', pro);
+
+  presetBtns.forEach(btn => {
+    const locked = !pro && LOCKED_PRESETS.includes(btn.dataset.preset);
+    btn.classList.toggle('locked', locked);
+    const icon = btn.querySelector('.lock-icon');
+    if (icon) icon.classList.toggle('hidden', !locked);
+  });
+
+  timerBtns.forEach(btn => {
+    const locked = !pro && LOCKED_MINUTES.includes(parseInt(btn.dataset.minutes));
+    btn.classList.toggle('locked', locked);
+    const icon = btn.querySelector('.lock-icon');
+    if (icon) icon.classList.toggle('hidden', !locked);
+  });
+
+  carrierSlider.disabled = !pro;
+  carrierProLabel.classList.toggle('hidden', pro);
+  if (!pro) {
+    carrierSlider.value = 200;
+    carrierValue.textContent = '200 Hz';
+  }
+}
+
 // --- Event Handlers ---
 
 // Preset buttons
 presetBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const preset = btn.dataset.preset;
+    if (!state.isPro && LOCKED_PRESETS.includes(preset)) { openUpgradeModal(); return; }
     if (preset === state.preset) return;
 
     state.preset = preset;
@@ -160,6 +214,7 @@ volumeSlider.addEventListener('input', () => {
 
 // Carrier frequency slider
 carrierSlider.addEventListener('input', () => {
+  if (!state.isPro) return;
   const freq = parseInt(carrierSlider.value);
   state.carrierFreq = freq;
   carrierValue.textContent = freq + ' Hz';
@@ -170,6 +225,7 @@ carrierSlider.addEventListener('input', () => {
 timerBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const minutes = parseInt(btn.dataset.minutes);
+    if (!state.isPro && LOCKED_MINUTES.includes(minutes)) { openUpgradeModal(); return; }
     state.timerMinutes = minutes;
 
     if (minutes > 0) {
@@ -202,6 +258,59 @@ function showHeadphoneNotice() {
     }, 1000);
   }, 3000);
 }
+
+// --- Upgrade Modal ---
+function openUpgradeModal() {
+  upgradeModal.classList.remove('hidden');
+  licenseKeyInput.value = '';
+  licenseKeyInput.classList.remove('input-error', 'input-success');
+  modalStatus.className = 'modal-status hidden';
+  activateBtn.disabled = false;
+  setTimeout(() => licenseKeyInput.focus(), 50);
+}
+
+function closeUpgradeModal() {
+  upgradeModal.classList.add('hidden');
+}
+
+async function handleActivate() {
+  if (!validateLicenseKey(licenseKeyInput.value)) {
+    licenseKeyInput.classList.add('input-error');
+    modalStatus.className = 'modal-status status-error';
+    modalStatus.textContent = 'Invalid key. Format: FWPRO-XXXXXXXX-XXXX';
+    return;
+  }
+  const key = licenseKeyInput.value.trim().toUpperCase();
+  activateBtn.disabled = true;
+  licenseKeyInput.classList.add('input-success');
+  modalStatus.className = 'modal-status status-success';
+  modalStatus.textContent = 'Pro unlocked! Enjoy all features.';
+  state.isPro = true;
+  state.licenseKey = key;
+  renderTier();
+  await sendMessage('ACTIVATE_LICENSE', { licenseKey: key, isPro: true });
+  setTimeout(closeUpgradeModal, 1800);
+}
+
+upgradeLink.addEventListener('click', openUpgradeModal);
+modalClose.addEventListener('click', closeUpgradeModal);
+upgradeModal.addEventListener('click', e => { if (e.target === upgradeModal) closeUpgradeModal(); });
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && !upgradeModal.classList.contains('hidden')) closeUpgradeModal();
+});
+activateBtn.addEventListener('click', handleActivate);
+licenseKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleActivate(); });
+
+licenseKeyInput.addEventListener('input', () => {
+  const raw = licenseKeyInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const parts = [];
+  if (raw.length > 0)  parts.push(raw.slice(0, 5));
+  if (raw.length > 5)  parts.push(raw.slice(5, 13));
+  if (raw.length > 13) parts.push(raw.slice(13, 17));
+  licenseKeyInput.value = parts.join('-');
+  licenseKeyInput.classList.remove('input-error', 'input-success');
+  modalStatus.classList.add('hidden');
+});
 
 // --- Timer Display ---
 function startTimerDisplay() {

@@ -15,7 +15,9 @@ const DEFAULT_STATE = {
   carrierFreq: 200,
   isPlaying: false,
   timerMinutes: 0,
-  timerEndTime: null
+  timerEndTime: null,
+  licenseKey: null,
+  isPro: false
 };
 
 const TIMER_ALARM_NAME = 'focuswave-timer';
@@ -222,6 +224,17 @@ async function handlePopupMessage(msg) {
 
     case 'CLEAR_TIMER': {
       await clearTimer();
+      return { success: true };
+    }
+
+    case 'ACTIVATE_LICENSE': {
+      const { licenseKey, isPro } = msg.payload;
+      await setState({ licenseKey, isPro });
+      return { success: true };
+    }
+
+    case 'DEACTIVATE_LICENSE': {
+      await setState({ licenseKey: null, isPro: false });
       return { success: true };
     }
 
