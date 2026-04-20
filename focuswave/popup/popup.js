@@ -282,13 +282,20 @@ async function handleActivate() {
   }
   const key = licenseKeyInput.value.trim().toUpperCase();
   activateBtn.disabled = true;
+  try {
+    await sendMessage('ACTIVATE_LICENSE', { licenseKey: key, isPro: true });
+  } catch (e) {
+    activateBtn.disabled = false;
+    modalStatus.className = 'modal-status status-error';
+    modalStatus.textContent = 'Activation failed. Please try again.';
+    return;
+  }
   licenseKeyInput.classList.add('input-success');
   modalStatus.className = 'modal-status status-success';
   modalStatus.textContent = 'Pro unlocked! Enjoy all features.';
   state.isPro = true;
   state.licenseKey = key;
   renderTier();
-  await sendMessage('ACTIVATE_LICENSE', { licenseKey: key, isPro: true });
   setTimeout(closeUpgradeModal, 1800);
 }
 

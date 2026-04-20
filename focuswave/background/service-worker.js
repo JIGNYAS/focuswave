@@ -126,6 +126,9 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // Ignore messages from offscreen document
   if (msg.type === 'AUDIO_PONG' || msg.type === 'AUDIO_FADE_COMPLETE') return;
 
+  // Only handle messages from this extension's own pages
+  if (sender.id !== chrome.runtime.id) return;
+
   handlePopupMessage(msg).then(sendResponse);
   return true; // async response
 });
