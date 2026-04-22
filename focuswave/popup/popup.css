@@ -15,8 +15,8 @@
   --accent-rose: #f472b6;
 
   --text-primary: #e8e4df;
-  --text-secondary: rgba(232, 228, 223, 0.5);
-  --text-dim: rgba(232, 228, 223, 0.22);
+  --text-secondary: rgba(232, 228, 223, 0.75);
+  --text-dim: rgba(232, 228, 223, 0.5);
 
   --glow-gold: rgba(245, 185, 66, 0.25);
   --glow-violet: rgba(167, 139, 250, 0.2);
@@ -191,8 +191,8 @@ body::after {
 .preset-hz {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10px;
-  opacity: 0.5;
-  font-weight: 300;
+  opacity: 0.85;
+  font-weight: 400;
 }
 
 /* ─── State Display ─── */
@@ -226,7 +226,7 @@ body::after {
   font-size: 11px;
   color: var(--text-secondary);
   margin-top: 4px;
-  font-weight: 300;
+  font-weight: 400;
   letter-spacing: 1px;
   text-transform: lowercase;
 }
@@ -411,12 +411,12 @@ body::after {
 .slider-value {
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  color: var(--text-secondary);
+  color: var(--text-primary);
   width: 48px;
   text-align: right;
   flex-shrink: 0;
   font-variant-numeric: tabular-nums;
-  font-weight: 300;
+  font-weight: 400;
 }
 
 /* ─── Timer ─── */
@@ -441,13 +441,13 @@ body::after {
 .timer-btn {
   flex: 1;
   padding: 7px 0;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.02);
-  color: var(--text-secondary);
+  color: var(--text-primary);
   font-family: 'JetBrains Mono', monospace;
   font-size: 11px;
-  font-weight: 400;
+  font-weight: 500;
   cursor: pointer;
   transition: all 0.3s cubic-bezier(0.22, 1, 0.36, 1);
   letter-spacing: 0.3px;
