@@ -28,6 +28,9 @@ const canvas = document.getElementById('visualizer');
 const canvasCtx = canvas.getContext('2d');
 const proBadge        = document.getElementById('proBadge');
 const upgradeLink     = document.getElementById('upgradeLink');
+const paletteBtn      = document.getElementById('paletteBtn');
+const themePanel      = document.getElementById('themePanel');
+const swatchBtns      = document.querySelectorAll('.theme-swatch');
 const upgradeModal    = document.getElementById('upgradeModal');
 const modalClose      = document.getElementById('modalClose');
 const licenseKeyInput = document.getElementById('licenseKeyInput');
@@ -45,7 +48,8 @@ let state = {
   timerMinutes: 0,
   timerEndTime: null,
   isPro: false,
-  licenseKey: null
+  licenseKey: null,
+  theme: 'dark'
 };
 
 let timerInterval = null;
@@ -56,6 +60,36 @@ let hasShownHeadphones = false;
 function sendMessage(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, payload });
 }
+
+// --- Theme ---
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  state.theme = theme;
+  swatchBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.theme === theme));
+}
+
+paletteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const opening = themePanel.classList.contains('hidden');
+  themePanel.classList.toggle('hidden', !opening);
+  paletteBtn.classList.toggle('active', opening);
+});
+
+themePanel.addEventListener('click', e => e.stopPropagation());
+
+document.addEventListener('click', () => {
+  themePanel.classList.add('hidden');
+  paletteBtn.classList.remove('active');
+});
+
+swatchBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    applyTheme(btn.dataset.theme);
+    themePanel.classList.add('hidden');
+    paletteBtn.classList.remove('active');
+    await sendMessage('SAVE_THEME', { theme: btn.dataset.theme });
+  });
+});
 
 // --- License Validation ---
 // Key format: FWPRO-[DATA8]-[CHECK4]
@@ -75,6 +109,7 @@ async function init() {
   if (savedState) {
     state = { ...state, ...savedState };
   }
+  applyTheme(state.theme || 'dark');
   renderAll();
   startVisualizer();
 

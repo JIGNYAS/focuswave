@@ -17,7 +17,8 @@ const DEFAULT_STATE = {
   timerMinutes: 0,
   timerEndTime: null,
   licenseKey: null,
-  isPro: false
+  isPro: false,
+  theme: 'dark'
 };
 
 const TIMER_ALARM_NAME = 'focuswave-timer';
@@ -227,6 +228,11 @@ async function handlePopupMessage(msg) {
 
     case 'CLEAR_TIMER': {
       await clearTimer();
+      return { success: true };
+    }
+
+    case 'SAVE_THEME': {
+      await setState({ theme: msg.payload.theme });
       return { success: true };
     }
 
