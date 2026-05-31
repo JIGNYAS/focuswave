@@ -215,12 +215,25 @@ presetBtns.forEach(btn => {
     if (!state.isPro && LOCKED_PRESETS.includes(preset)) { openUpgradeModal(); return; }
     if (preset === state.preset) return;
 
-    state.preset = preset;
     const info = PRESET_LABELS[preset];
-    state.beatFreq = parseFloat(info.hz);
+    if (!info) return;
+
+    const prevPreset = state.preset;
+    const prevBeatFreq = state.beatFreq;
+
+    // "2 Hz" -> 2 ; parse the leading number explicitly
+    state.preset = preset;
+    state.beatFreq = parseFloat(info.hz.match(/[\d.]+/)?.[0] ?? info.hz);
     renderPresets();
     renderStateDisplay();
-    await sendMessage('SET_PRESET', { preset });
+    try {
+      await sendMessage('SET_PRESET', { preset });
+    } catch (e) {
+      state.preset = prevPreset;
+      state.beatFreq = prevBeatFreq;
+      renderPresets();
+      renderStateDisplay();
+    }
   });
 });
 
@@ -229,31 +242,55 @@ playBtn.addEventListener('click', async () => {
   if (state.isPlaying) {
     state.isPlaying = false;
     renderPlayState();
-    await sendMessage('PAUSE');
+    try {
+      await sendMessage('PAUSE');
+    } catch (e) {
+      state.isPlaying = true;
+      renderPlayState();
+      return;
+    }
     stopTimerDisplay();
   } else {
     state.isPlaying = true;
     renderPlayState();
-    await sendMessage('PLAY');
+    try {
+      await sendMessage('PLAY');
+    } catch (e) {
+      state.isPlaying = false;
+      renderPlayState();
+      return;
+    }
     showHeadphoneNotice();
   }
 });
 
 // Volume slider
-volumeSlider.addEventListener('input', () => {
+volumeSlider.addEventListener('input', async () => {
+  const prevVolume = state.volume;
   const vol = parseInt(volumeSlider.value);
   state.volume = vol / 100;
   volumeValue.textContent = vol + '%';
-  sendMessage('SET_VOLUME', { volume: state.volume });
+  try {
+    await sendMessage('SET_VOLUME', { volume: state.volume });
+  } catch (e) {
+    state.volume = prevVolume;
+    renderSliders();
+  }
 });
 
 // Carrier frequency slider
-carrierSlider.addEventListener('input', () => {
+carrierSlider.addEventListener('input', async () => {
   if (!state.isPro) return;
+  const prevCarrier = state.carrierFreq;
   const freq = parseInt(carrierSlider.value);
   state.carrierFreq = freq;
   carrierValue.textContent = freq + ' Hz';
-  sendMessage('SET_CARRIER', { carrierFreq: freq });
+  try {
+    await sendMessage('SET_CARRIER', { carrierFreq: freq });
+  } catch (e) {
+    state.carrierFreq = prevCarrier;
+    renderSliders();
+  }
 });
 
 // Timer buttons
@@ -261,15 +298,32 @@ timerBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const minutes = parseInt(btn.dataset.minutes);
     if (!state.isPro && LOCKED_MINUTES.includes(minutes)) { openUpgradeModal(); return; }
+
+    const prevMinutes = state.timerMinutes;
+    const prevEndTime = state.timerEndTime;
     state.timerMinutes = minutes;
 
     if (minutes > 0) {
       state.timerEndTime = Date.now() + minutes * 60 * 1000;
-      await sendMessage('SET_TIMER', { minutes });
+      try {
+        await sendMessage('SET_TIMER', { minutes });
+      } catch (e) {
+        state.timerMinutes = prevMinutes;
+        state.timerEndTime = prevEndTime;
+        renderTimer();
+        return;
+      }
       startTimerDisplay();
     } else {
       state.timerEndTime = null;
-      await sendMessage('CLEAR_TIMER');
+      try {
+        await sendMessage('CLEAR_TIMER');
+      } catch (e) {
+        state.timerMinutes = prevMinutes;
+        state.timerEndTime = prevEndTime;
+        renderTimer();
+        return;
+      }
       stopTimerDisplay();
     }
 

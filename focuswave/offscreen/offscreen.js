@@ -12,6 +12,18 @@ const PRESETS = {
 const FADE_DURATION = 0.5; // seconds
 const TRANSITION_DURATION = 0.3; // seconds for preset switch
 
+// Valid input ranges for audio parameters
+const CARRIER_MIN = 20, CARRIER_MAX = 1500;
+const BEAT_MIN = 0, BEAT_MAX = 100;
+const VOLUME_MIN = 0, VOLUME_MAX = 1;
+
+// Clamp value into [min, max]; reject NaN/Infinity by using fallback
+function clamp(value, min, max, fallback) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  return Math.min(max, Math.max(min, n));
+}
+
 let ctx = null;
 let oscLeft = null;
 let oscRight = null;
@@ -23,29 +35,39 @@ let currentCarrierFreq = 200;
 let currentBeatFreq = 14;
 
 function createAudioGraph(carrierFreq, beatFreq, volume) {
-  ctx = new AudioContext();
-  merger = ctx.createChannelMerger(2);
-  masterGain = ctx.createGain();
-  masterGain.gain.value = 0; // start silent for fade-in
+  try {
+    ctx = new AudioContext();
+    merger = ctx.createChannelMerger(2);
+    masterGain = ctx.createGain();
+    masterGain.gain.value = 0; // start silent for fade-in
 
-  oscLeft = ctx.createOscillator();
-  oscRight = ctx.createOscillator();
-  oscLeft.type = 'sine';
-  oscRight.type = 'sine';
-  oscLeft.frequency.value = carrierFreq;
-  oscRight.frequency.value = carrierFreq + beatFreq;
+    oscLeft = ctx.createOscillator();
+    oscRight = ctx.createOscillator();
+    oscLeft.type = 'sine';
+    oscRight.type = 'sine';
+    oscLeft.frequency.value = carrierFreq;
+    oscRight.frequency.value = carrierFreq + beatFreq;
 
-  oscLeft.connect(merger, 0, 0);
-  oscRight.connect(merger, 0, 1);
-  merger.connect(masterGain);
-  masterGain.connect(ctx.destination);
+    oscLeft.connect(merger, 0, 0);
+    oscRight.connect(merger, 0, 1);
+    merger.connect(masterGain);
+    masterGain.connect(ctx.destination);
 
-  oscLeft.start();
-  oscRight.start();
+    oscLeft.start();
+    oscRight.start();
 
-  currentCarrierFreq = carrierFreq;
-  currentBeatFreq = beatFreq;
-  currentVolume = volume;
+    currentCarrierFreq = carrierFreq;
+    currentBeatFreq = beatFreq;
+    currentVolume = volume;
+    return true;
+  } catch (e) {
+    // Audio setup failed: tear down any partial graph and reset state so
+    // a later play attempt can retry cleanly.
+    console.error('FocusWave: failed to create audio graph', e);
+    destroyAudioGraph();
+    isPlaying = false;
+    return false;
+  }
 }
 
 function fadeIn(targetVolume, duration = FADE_DURATION) {
@@ -67,20 +89,27 @@ function fadeOut(duration = FADE_DURATION) {
 function destroyAudioGraph() {
   if (oscLeft) { try { oscLeft.stop(); } catch (e) {} oscLeft = null; }
   if (oscRight) { try { oscRight.stop(); } catch (e) {} oscRight = null; }
-  if (masterGain) { masterGain.disconnect(); masterGain = null; }
-  if (merger) { merger.disconnect(); merger = null; }
-  if (ctx) { ctx.close(); ctx = null; }
+  if (masterGain) { try { masterGain.disconnect(); } catch (e) {} masterGain = null; }
+  if (merger) { try { merger.disconnect(); } catch (e) {} merger = null; }
+  if (ctx) { try { ctx.close(); } catch (e) {} ctx = null; }
 }
 
-function handlePlay({ carrierFreq, beatFreq, volume }) {
+function handlePlay({ carrierFreq, beatFreq, volume } = {}) {
+  carrierFreq = clamp(carrierFreq, CARRIER_MIN, CARRIER_MAX, currentCarrierFreq);
+  beatFreq = clamp(beatFreq, BEAT_MIN, BEAT_MAX, currentBeatFreq);
+  volume = clamp(volume, VOLUME_MIN, VOLUME_MAX, currentVolume);
+
   if (isPlaying && ctx) {
-    // Already playing, just update params
+    // Already playing: update params in place rather than rebuilding the
+    // graph, avoiding an audible gap or leaked oscillator nodes. The preset
+    // handler smoothly transitions both carrier and beat frequencies.
+    handleSetPreset({ beatFreq, carrierFreq });
     handleSetVolume({ volume });
     return;
   }
 
   destroyAudioGraph();
-  createAudioGraph(carrierFreq, beatFreq, volume);
+  if (!createAudioGraph(carrierFreq, beatFreq, volume)) return;
   fadeIn(volume);
   isPlaying = true;
 }
@@ -94,7 +123,8 @@ function handlePause() {
   }, FADE_DURATION * 1000 + 50);
 }
 
-function handleSetVolume({ volume }) {
+function handleSetVolume({ volume } = {}) {
+  volume = clamp(volume, VOLUME_MIN, VOLUME_MAX, currentVolume);
   currentVolume = volume;
   if (!ctx || !masterGain) return;
   const now = ctx.currentTime;
@@ -103,7 +133,9 @@ function handleSetVolume({ volume }) {
   masterGain.gain.linearRampToValueAtTime(volume, now + 0.1);
 }
 
-function handleSetPreset({ beatFreq, carrierFreq }) {
+function handleSetPreset({ beatFreq, carrierFreq } = {}) {
+  beatFreq = clamp(beatFreq, BEAT_MIN, BEAT_MAX, currentBeatFreq);
+  carrierFreq = clamp(carrierFreq, CARRIER_MIN, CARRIER_MAX, currentCarrierFreq);
   if (!ctx || !isPlaying) {
     currentBeatFreq = beatFreq;
     currentCarrierFreq = carrierFreq;
@@ -129,7 +161,8 @@ function handleSetPreset({ beatFreq, carrierFreq }) {
   }, TRANSITION_DURATION * 1000 + 30);
 }
 
-function handleSetCarrier({ carrierFreq }) {
+function handleSetCarrier({ carrierFreq } = {}) {
+  carrierFreq = clamp(carrierFreq, CARRIER_MIN, CARRIER_MAX, currentCarrierFreq);
   currentCarrierFreq = carrierFreq;
   if (!ctx || !oscLeft || !oscRight) return;
   const now = ctx.currentTime;

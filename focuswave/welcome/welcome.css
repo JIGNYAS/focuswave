@@ -1,6 +1,20 @@
 /* FocusWave — Welcome Page — Neural Observatory Theme */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+/* Self-hosted fonts (no runtime CDN dependency). Variable woff2 covers all weights. */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../fonts/outfit-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-latin.woff2') format('woff2');
+}
 
 :root {
   --bg-deep: #06060e;

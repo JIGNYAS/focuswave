@@ -121,6 +121,32 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
   }, 1500);
 });
 
+// --- Playback Control (shared by messages and commands) ---
+
+async function startPlayback(state) {
+  await ensureOffscreenDocument();
+  await sendToOffscreen({
+    type: 'AUDIO_PLAY',
+    payload: {
+      carrierFreq: state.carrierFreq,
+      beatFreq: state.beatFreq,
+      volume: state.volume
+    }
+  });
+  await setState({ isPlaying: true });
+  setBadgePlaying();
+}
+
+async function stopPlayback(state) {
+  await sendToOffscreen({ type: 'AUDIO_PAUSE' });
+  await setState({ isPlaying: false });
+  setBadgeIdle();
+  // Clear timer if active
+  if (state.timerEndTime) {
+    await clearTimer();
+  }
+}
+
 // --- Message Handling (from Popup) ---
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
@@ -143,28 +169,12 @@ async function handlePopupMessage(msg) {
     }
 
     case 'PLAY': {
-      await ensureOffscreenDocument();
-      await sendToOffscreen({
-        type: 'AUDIO_PLAY',
-        payload: {
-          carrierFreq: state.carrierFreq,
-          beatFreq: state.beatFreq,
-          volume: state.volume
-        }
-      });
-      await setState({ isPlaying: true });
-      setBadgePlaying();
+      await startPlayback(state);
       return { success: true };
     }
 
     case 'PAUSE': {
-      await sendToOffscreen({ type: 'AUDIO_PAUSE' });
-      await setState({ isPlaying: false });
-      setBadgeIdle();
-      // Clear timer if active
-      if (state.timerEndTime) {
-        await clearTimer();
-      }
+      await stopPlayback(state);
       return { success: true };
     }
 
@@ -251,6 +261,19 @@ async function handlePopupMessage(msg) {
       return { success: false, error: 'Unknown message type' };
   }
 }
+
+// --- Keyboard Command Handling ---
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'toggle-play') return;
+
+  const state = await getState();
+  if (state.isPlaying) {
+    await stopPlayback(state);
+  } else {
+    await startPlayback(state);
+  }
+});
 
 // --- Auto-Resume on Chrome Startup ---
 
