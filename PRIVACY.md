@@ -31,7 +31,7 @@ FocusWave uses **no** analytics, **no** tracking, **no** cookies, and **no** thi
 
 ## Network Requests
 
-FocusWave has no backend and makes no requests that carry your data. The extension may load web fonts (Google Fonts) at load time purely for typography. This is a standard request for font files and contains no personal information; it is unrelated to any feature or setting. No other network requests are made.
+FocusWave has no backend and makes **no external network requests whatsoever**. All fonts (Outfit and JetBrains Mono) are bundled with the extension and served locally from within it via local `@font-face` declarations — there is no Google Fonts request and no other external request of any kind. No CDN, no third-party servers, and no analytics endpoints are ever contacted.
 
 ## Pro License
 

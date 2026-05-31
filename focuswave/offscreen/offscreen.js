@@ -34,6 +34,10 @@ let currentVolume = 0.3;
 let currentCarrierFreq = 200;
 let currentBeatFreq = 14;
 
+// Incremented on every play/pause so that deferred suspend/stop timeouts can
+// detect whether a newer playback action superseded them (P1-7 pause race).
+let playbackGeneration = 0;
+
 function createAudioGraph(carrierFreq, beatFreq, volume) {
   try {
     ctx = new AudioContext();
@@ -99,6 +103,9 @@ function handlePlay({ carrierFreq, beatFreq, volume } = {}) {
   beatFreq = clamp(beatFreq, BEAT_MIN, BEAT_MAX, currentBeatFreq);
   volume = clamp(volume, VOLUME_MIN, VOLUME_MAX, currentVolume);
 
+  // Bump the generation so any pending pause/stop timeout knows it is stale.
+  playbackGeneration++;
+
   if (isPlaying && ctx) {
     // Already playing: update params in place rather than rebuilding the
     // graph, avoiding an audible gap or leaked oscillator nodes. The preset
@@ -116,8 +123,13 @@ function handlePlay({ carrierFreq, beatFreq, volume } = {}) {
 
 function handlePause() {
   if (!isPlaying || !ctx) return;
+  // Capture the generation so the deferred suspend can detect a newer
+  // play/pause and bail out instead of tearing down restarted playback.
+  playbackGeneration++;
+  const generation = playbackGeneration;
   fadeOut();
   setTimeout(() => {
+    if (generation !== playbackGeneration) return;
     if (ctx) ctx.suspend();
     isPlaying = false;
   }, FADE_DURATION * 1000 + 50);
@@ -170,18 +182,34 @@ function handleSetCarrier({ carrierFreq } = {}) {
   oscRight.frequency.setValueAtTime(carrierFreq + currentBeatFreq, now);
 }
 
-function handleFadeStop({ fadeDuration = 5 }) {
+function handleFadeStop({ fadeDuration = 5 } = {}) {
   if (!ctx || !masterGain) return;
+  // Capture the generation so a play/pause during the fade cancels this stop.
+  playbackGeneration++;
+  const generation = playbackGeneration;
   const now = ctx.currentTime;
   masterGain.gain.cancelScheduledValues(now);
   masterGain.gain.setValueAtTime(masterGain.gain.value, now);
   masterGain.gain.linearRampToValueAtTime(0, now + fadeDuration);
 
   setTimeout(() => {
+    if (generation !== playbackGeneration) return;
     destroyAudioGraph();
     isPlaying = false;
     chrome.runtime.sendMessage({ type: 'AUDIO_FADE_COMPLETE' });
   }, fadeDuration * 1000 + 100);
+}
+
+// Owns the full timer-completion sequence so it survives MV3 worker death:
+// chime -> ring-out -> fade out the main audio -> stop. handleFadeStop emits
+// the single AUDIO_FADE_COMPLETE message once the fade fully finishes.
+const CHIME_RING_OUT_MS = 1500;
+
+function handleTimerComplete({ fadeDuration = 5 } = {}) {
+  handlePlayChime();
+  setTimeout(() => {
+    handleFadeStop({ fadeDuration });
+  }, CHIME_RING_OUT_MS);
 }
 
 function handlePlayChime() {
@@ -248,6 +276,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       break;
     case 'AUDIO_PLAY_CHIME':
       handlePlayChime();
+      sendResponse({ success: true });
+      break;
+    case 'AUDIO_TIMER_COMPLETE':
+      handleTimerComplete(msg.payload);
       sendResponse({ success: true });
       break;
     case 'AUDIO_PING':

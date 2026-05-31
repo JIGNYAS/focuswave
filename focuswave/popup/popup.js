@@ -349,7 +349,14 @@ function showHeadphoneNotice() {
 }
 
 // --- Upgrade Modal ---
+let modalTrigger = null;
+
+function getModalFocusable() {
+  return [licenseKeyInput, activateBtn, modalClose].filter(el => el && !el.disabled);
+}
+
 function openUpgradeModal() {
+  modalTrigger = document.activeElement;
   upgradeModal.classList.remove('hidden');
   licenseKeyInput.value = '';
   licenseKeyInput.classList.remove('input-error', 'input-success');
@@ -360,6 +367,31 @@ function openUpgradeModal() {
 
 function closeUpgradeModal() {
   upgradeModal.classList.add('hidden');
+  if (modalTrigger && typeof modalTrigger.focus === 'function') {
+    modalTrigger.focus();
+  }
+  modalTrigger = null;
+}
+
+// Simple focus trap for the modal
+function trapModalFocus(e) {
+  if (e.key !== 'Tab') return;
+  if (upgradeModal.classList.contains('hidden')) return;
+  const focusable = getModalFocusable();
+  if (focusable.length === 0) return;
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === first || !upgradeModal.contains(document.activeElement)) {
+      e.preventDefault();
+      last.focus();
+    }
+  } else {
+    if (document.activeElement === last || !upgradeModal.contains(document.activeElement)) {
+      e.preventDefault();
+      first.focus();
+    }
+  }
 }
 
 async function handleActivate() {
@@ -393,6 +425,7 @@ modalClose.addEventListener('click', closeUpgradeModal);
 upgradeModal.addEventListener('click', e => { if (e.target === upgradeModal) closeUpgradeModal(); });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape' && !upgradeModal.classList.contains('hidden')) closeUpgradeModal();
+  trapModalFocus(e);
 });
 activateBtn.addEventListener('click', handleActivate);
 licenseKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleActivate(); });
@@ -452,6 +485,7 @@ function updateTimerCountdown() {
 
 // --- Sine Wave Visualizer ---
 let animationId = null;
+let canvasInitialized = false;
 
 function startVisualizer() {
   if (animationId) return;
@@ -459,17 +493,16 @@ function startVisualizer() {
 }
 
 function drawWave(timestamp) {
-  const width = canvas.width;
-  const height = canvas.height;
   const dpr = window.devicePixelRatio || 1;
 
-  // Handle DPR on first frame
-  if (canvas.width === 320) {
+  // Handle DPR setup exactly once
+  if (!canvasInitialized) {
     canvas.width = 320 * dpr;
     canvas.height = 56 * dpr;
     canvas.style.width = '320px';
     canvas.style.height = '56px';
     canvasCtx.scale(dpr, dpr);
+    canvasInitialized = true;
   }
 
   const w = 320;
@@ -522,6 +555,34 @@ function drawWave(timestamp) {
   canvasCtx.shadowBlur = 0;
   animationId = requestAnimationFrame(drawWave);
 }
+
+// --- Sync with storage changes (e.g. timer completes while popup open) ---
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+
+  const relevant = ['isPlaying', 'timerEndTime', 'timerMinutes'];
+  let playChanged = false;
+  let timerChanged = false;
+
+  relevant.forEach(key => {
+    if (!(key in changes)) return;
+    const newValue = changes[key].newValue;
+    if (state[key] === newValue) return; // only react to actual changes
+    state[key] = newValue;
+    if (key === 'isPlaying') playChanged = true;
+    if (key === 'timerEndTime' || key === 'timerMinutes') timerChanged = true;
+  });
+
+  if (playChanged) renderPlayState();
+  if (timerChanged) {
+    if (state.timerEndTime && state.timerEndTime > Date.now()) {
+      startTimerDisplay();
+    } else {
+      stopTimerDisplay();
+    }
+    renderTimer();
+  }
+});
 
 // --- Init ---
 init();

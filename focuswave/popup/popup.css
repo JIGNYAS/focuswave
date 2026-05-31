@@ -55,6 +55,9 @@
   /* RGB parts of accents for composing rgba() */
   --accent-rgb: 245, 185, 66;
   --accent-secondary-rgb: 167, 139, 250;
+
+  /* Modal backdrop scrim */
+  --modal-backdrop: rgba(6, 6, 14, 0.85);
 }
 
 /* ─── Light Theme ─── */
@@ -70,7 +73,8 @@
   --accent-rose: #be185d;
   --text-primary: #1c1917;
   --text-secondary: rgba(28, 25, 23, 0.55);
-  --text-dim: rgba(28, 25, 23, 0.28);
+  --text-dim: rgba(28, 25, 23, 0.5);
+  --modal-backdrop: rgba(28, 25, 23, 0.55);
   --glow-gold: rgba(180, 83, 9, 0.2);
   --glow-violet: rgba(109, 40, 217, 0.15);
   --card-bg: rgba(0, 0, 0, 0.025);
@@ -865,7 +869,7 @@ body::after {
 .modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(6, 6, 14, 0.85);
+  background: var(--modal-backdrop);
   backdrop-filter: blur(6px);
   z-index: 100;
   display: flex;
