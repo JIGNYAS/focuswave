@@ -26,17 +26,9 @@ const stateFreq = document.getElementById('stateFreq');
 const stateLabel = document.getElementById('stateLabel');
 const canvas = document.getElementById('visualizer');
 const canvasCtx = canvas.getContext('2d');
-const proBadge        = document.getElementById('proBadge');
-const upgradeLink     = document.getElementById('upgradeLink');
 const paletteBtn      = document.getElementById('paletteBtn');
 const themePanel      = document.getElementById('themePanel');
 const swatchBtns      = document.querySelectorAll('.theme-swatch');
-const upgradeModal    = document.getElementById('upgradeModal');
-const modalClose      = document.getElementById('modalClose');
-const licenseKeyInput = document.getElementById('licenseKeyInput');
-const activateBtn     = document.getElementById('activateBtn');
-const modalStatus     = document.getElementById('modalStatus');
-const carrierProLabel = document.getElementById('carrierProLabel');
 
 // --- State ---
 let state = {
@@ -47,8 +39,6 @@ let state = {
   isPlaying: false,
   timerMinutes: 0,
   timerEndTime: null,
-  isPro: false,
-  licenseKey: null,
   theme: 'dark'
 };
 
@@ -91,18 +81,6 @@ swatchBtns.forEach(btn => {
   });
 });
 
-// --- License Validation ---
-// Key format: FWPRO-[DATA8]-[CHECK4]
-// CHECK4 = ((sum_of_charCodes(DATA8) * 31) % 65536).toString(16).toUpperCase().padStart(4,'0')
-function validateLicenseKey(raw) {
-  const key = raw.trim().toUpperCase();
-  const match = key.match(/^FWPRO-([A-Z0-9]{8})-([A-Z0-9]{4})$/);
-  if (!match) return false;
-  const sum = match[1].split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const expected = ((sum * 31) % 65536).toString(16).toUpperCase().padStart(4, '0');
-  return match[2] === expected;
-}
-
 // --- Initialize ---
 async function init() {
   const savedState = await sendMessage('GET_STATE');
@@ -125,7 +103,6 @@ function renderAll() {
   renderSliders();
   renderTimer();
   renderStateDisplay();
-  renderTier();
 }
 
 function renderPresets() {
@@ -176,43 +153,12 @@ function renderStateDisplay() {
   }
 }
 
-const LOCKED_PRESETS = ['delta', 'theta', 'gamma'];
-const LOCKED_MINUTES = [45, 60];
-
-function renderTier() {
-  const pro = state.isPro;
-  proBadge.classList.toggle('hidden', !pro);
-  upgradeLink.classList.toggle('hidden', pro);
-
-  presetBtns.forEach(btn => {
-    const locked = !pro && LOCKED_PRESETS.includes(btn.dataset.preset);
-    btn.classList.toggle('locked', locked);
-    const icon = btn.querySelector('.lock-icon');
-    if (icon) icon.classList.toggle('hidden', !locked);
-  });
-
-  timerBtns.forEach(btn => {
-    const locked = !pro && LOCKED_MINUTES.includes(parseInt(btn.dataset.minutes));
-    btn.classList.toggle('locked', locked);
-    const icon = btn.querySelector('.lock-icon');
-    if (icon) icon.classList.toggle('hidden', !locked);
-  });
-
-  carrierSlider.disabled = !pro;
-  carrierProLabel.classList.toggle('hidden', pro);
-  if (!pro) {
-    carrierSlider.value = 200;
-    carrierValue.textContent = '200 Hz';
-  }
-}
-
 // --- Event Handlers ---
 
 // Preset buttons
 presetBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const preset = btn.dataset.preset;
-    if (!state.isPro && LOCKED_PRESETS.includes(preset)) { openUpgradeModal(); return; }
     if (preset === state.preset) return;
 
     const info = PRESET_LABELS[preset];
@@ -280,7 +226,6 @@ volumeSlider.addEventListener('input', async () => {
 
 // Carrier frequency slider
 carrierSlider.addEventListener('input', async () => {
-  if (!state.isPro) return;
   const prevCarrier = state.carrierFreq;
   const freq = parseInt(carrierSlider.value);
   state.carrierFreq = freq;
@@ -297,7 +242,6 @@ carrierSlider.addEventListener('input', async () => {
 timerBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const minutes = parseInt(btn.dataset.minutes);
-    if (!state.isPro && LOCKED_MINUTES.includes(minutes)) { openUpgradeModal(); return; }
 
     const prevMinutes = state.timerMinutes;
     const prevEndTime = state.timerEndTime;
@@ -347,99 +291,6 @@ function showHeadphoneNotice() {
     }, 1000);
   }, 3000);
 }
-
-// --- Upgrade Modal ---
-let modalTrigger = null;
-
-function getModalFocusable() {
-  return [licenseKeyInput, activateBtn, modalClose].filter(el => el && !el.disabled);
-}
-
-function openUpgradeModal() {
-  modalTrigger = document.activeElement;
-  upgradeModal.classList.remove('hidden');
-  licenseKeyInput.value = '';
-  licenseKeyInput.classList.remove('input-error', 'input-success');
-  modalStatus.className = 'modal-status hidden';
-  activateBtn.disabled = false;
-  setTimeout(() => licenseKeyInput.focus(), 50);
-}
-
-function closeUpgradeModal() {
-  upgradeModal.classList.add('hidden');
-  if (modalTrigger && typeof modalTrigger.focus === 'function') {
-    modalTrigger.focus();
-  }
-  modalTrigger = null;
-}
-
-// Simple focus trap for the modal
-function trapModalFocus(e) {
-  if (e.key !== 'Tab') return;
-  if (upgradeModal.classList.contains('hidden')) return;
-  const focusable = getModalFocusable();
-  if (focusable.length === 0) return;
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (e.shiftKey) {
-    if (document.activeElement === first || !upgradeModal.contains(document.activeElement)) {
-      e.preventDefault();
-      last.focus();
-    }
-  } else {
-    if (document.activeElement === last || !upgradeModal.contains(document.activeElement)) {
-      e.preventDefault();
-      first.focus();
-    }
-  }
-}
-
-async function handleActivate() {
-  if (!validateLicenseKey(licenseKeyInput.value)) {
-    licenseKeyInput.classList.add('input-error');
-    modalStatus.className = 'modal-status status-error';
-    modalStatus.textContent = 'Invalid key. Format: FWPRO-XXXXXXXX-XXXX';
-    return;
-  }
-  const key = licenseKeyInput.value.trim().toUpperCase();
-  activateBtn.disabled = true;
-  try {
-    await sendMessage('ACTIVATE_LICENSE', { licenseKey: key, isPro: true });
-  } catch (e) {
-    activateBtn.disabled = false;
-    modalStatus.className = 'modal-status status-error';
-    modalStatus.textContent = 'Activation failed. Please try again.';
-    return;
-  }
-  licenseKeyInput.classList.add('input-success');
-  modalStatus.className = 'modal-status status-success';
-  modalStatus.textContent = 'Pro unlocked! Enjoy all features.';
-  state.isPro = true;
-  state.licenseKey = key;
-  renderTier();
-  setTimeout(closeUpgradeModal, 1800);
-}
-
-upgradeLink.addEventListener('click', openUpgradeModal);
-modalClose.addEventListener('click', closeUpgradeModal);
-upgradeModal.addEventListener('click', e => { if (e.target === upgradeModal) closeUpgradeModal(); });
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape' && !upgradeModal.classList.contains('hidden')) closeUpgradeModal();
-  trapModalFocus(e);
-});
-activateBtn.addEventListener('click', handleActivate);
-licenseKeyInput.addEventListener('keydown', e => { if (e.key === 'Enter') handleActivate(); });
-
-licenseKeyInput.addEventListener('input', () => {
-  const raw = licenseKeyInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const parts = [];
-  if (raw.length > 0)  parts.push(raw.slice(0, 5));
-  if (raw.length > 5)  parts.push(raw.slice(5, 13));
-  if (raw.length > 13) parts.push(raw.slice(13, 17));
-  licenseKeyInput.value = parts.join('-');
-  licenseKeyInput.classList.remove('input-error', 'input-success');
-  modalStatus.classList.add('hidden');
-});
 
 // --- Timer Display ---
 function startTimerDisplay() {

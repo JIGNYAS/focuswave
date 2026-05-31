@@ -16,23 +16,10 @@ const DEFAULT_STATE = {
   isPlaying: false,
   timerMinutes: 0,
   timerEndTime: null,
-  licenseKey: null,
-  isPro: false,
   theme: 'dark'
 };
 
 const TIMER_ALARM_NAME = 'focuswave-timer';
-
-// --- License Validation ---
-
-function validateLicenseKey(raw) {
-  const key = String(raw || '').trim().toUpperCase();
-  const match = key.match(/^FWPRO-([A-Z0-9]{8})-([A-Z0-9]{4})$/);
-  if (!match) return false;
-  const sum = match[1].split('').reduce((a, c) => a + c.charCodeAt(0), 0);
-  const expected = ((sum * 31) % 65536).toString(16).toUpperCase().padStart(4, '0');
-  return match[2] === expected;
-}
 
 // --- Offscreen Document Lifecycle ---
 
@@ -132,12 +119,10 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
 async function startPlayback(state) {
   await ensureOffscreenDocument();
-  // Carrier frequency is Pro-gated; never trust stored value for free users.
-  const carrierFreq = state.isPro ? state.carrierFreq : 200;
   await sendToOffscreen({
     type: 'AUDIO_PLAY',
     payload: {
-      carrierFreq,
+      carrierFreq: state.carrierFreq,
       beatFreq: state.beatFreq,
       volume: state.volume
     }
@@ -268,20 +253,6 @@ async function handlePopupMessage(msg) {
       return { success: true };
     }
 
-    case 'ACTIVATE_LICENSE': {
-      const { licenseKey } = msg.payload;
-      if (!validateLicenseKey(licenseKey)) {
-        return { success: false, error: 'Invalid key' };
-      }
-      await setState({ licenseKey, isPro: true });
-      return { success: true };
-    }
-
-    case 'DEACTIVATE_LICENSE': {
-      await setState({ licenseKey: null, isPro: false, carrierFreq: 200 });
-      return { success: true };
-    }
-
     default:
       return { success: false, error: 'Unknown message type' };
   }
@@ -317,7 +288,7 @@ chrome.runtime.onStartup.addListener(async () => {
       await sendToOffscreen({
         type: 'AUDIO_PLAY',
         payload: {
-          carrierFreq: state.isPro ? state.carrierFreq : 200,
+          carrierFreq: state.carrierFreq,
           beatFreq: state.beatFreq,
           volume: state.volume
         }
