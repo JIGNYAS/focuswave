@@ -15,7 +15,8 @@ const DEFAULT_STATE = {
   carrierFreq: 200,
   isPlaying: false,
   timerMinutes: 0,
-  timerEndTime: null
+  timerEndTime: null,
+  theme: 'dark'
 };
 
 const TIMER_ALARM_NAME = 'focuswave-timer';
@@ -103,26 +104,64 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
     return;
   }
 
-  // Play chime
-  await sendToOffscreen({ type: 'AUDIO_PLAY_CHIME' });
+  // Bail out on stale/duplicate alarm where the timer was already cleared
+  if (!state.timerEndTime) {
+    await clearTimer();
+    return;
+  }
 
-  // Wait for chime (~1.5s), then fade out over 5 seconds
-  setTimeout(async () => {
-    await sendToOffscreen({ type: 'AUDIO_FADE_STOP', payload: { fadeDuration: 5 } });
-
-    // After fade completes, update state
-    setTimeout(async () => {
-      await setState({ isPlaying: false, timerMinutes: 0, timerEndTime: null });
-      setBadgeIdle();
-    }, 5200);
-  }, 1500);
+  // Offscreen doc owns the chime -> wait -> fade -> stop sequence and
+  // replies with AUDIO_FADE_COMPLETE when done (handled in onMessage).
+  await sendToOffscreen({ type: 'AUDIO_TIMER_COMPLETE', payload: { fadeDuration: 5 } });
 });
+
+// --- Playback Control (shared by messages and commands) ---
+
+async function startPlayback(state) {
+  await ensureOffscreenDocument();
+  await sendToOffscreen({
+    type: 'AUDIO_PLAY',
+    payload: {
+      carrierFreq: state.carrierFreq,
+      beatFreq: state.beatFreq,
+      volume: state.volume
+    }
+  });
+  await setState({ isPlaying: true });
+  setBadgePlaying();
+}
+
+async function stopPlayback(state) {
+  await sendToOffscreen({ type: 'AUDIO_PAUSE' });
+  await setState({ isPlaying: false });
+  setBadgeIdle();
+  // Clear timer if active
+  if (state.timerEndTime) {
+    await clearTimer();
+  }
+}
 
 // --- Message Handling (from Popup) ---
 
+async function finalizeTimerCompletion() {
+  await setState({ isPlaying: false, timerMinutes: 0, timerEndTime: null });
+  setBadgeIdle();
+  await clearTimer();
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  // Ignore messages from offscreen document
-  if (msg.type === 'AUDIO_PONG' || msg.type === 'AUDIO_FADE_COMPLETE') return;
+  // The offscreen doc signals it finished the chime -> fade -> stop sequence.
+  if (msg.type === 'AUDIO_FADE_COMPLETE') {
+    finalizeTimerCompletion();
+    return;
+  }
+
+  // Any other AUDIO_* message is worker<->offscreen traffic (our own
+  // sendMessage broadcast echoes back here) — not a popup command.
+  if (typeof msg.type === 'string' && msg.type.startsWith('AUDIO_')) return;
+
+  // Only handle messages from this extension's own pages
+  if (sender.id !== chrome.runtime.id) return;
 
   handlePopupMessage(msg).then(sendResponse);
   return true; // async response
@@ -137,28 +176,12 @@ async function handlePopupMessage(msg) {
     }
 
     case 'PLAY': {
-      await ensureOffscreenDocument();
-      await sendToOffscreen({
-        type: 'AUDIO_PLAY',
-        payload: {
-          carrierFreq: state.carrierFreq,
-          beatFreq: state.beatFreq,
-          volume: state.volume
-        }
-      });
-      await setState({ isPlaying: true });
-      setBadgePlaying();
+      await startPlayback(state);
       return { success: true };
     }
 
     case 'PAUSE': {
-      await sendToOffscreen({ type: 'AUDIO_PAUSE' });
-      await setState({ isPlaying: false });
-      setBadgeIdle();
-      // Clear timer if active
-      if (state.timerEndTime) {
-        await clearTimer();
-      }
+      await stopPlayback(state);
       return { success: true };
     }
 
@@ -225,10 +248,28 @@ async function handlePopupMessage(msg) {
       return { success: true };
     }
 
+    case 'SAVE_THEME': {
+      await setState({ theme: msg.payload.theme });
+      return { success: true };
+    }
+
     default:
       return { success: false, error: 'Unknown message type' };
   }
 }
+
+// --- Keyboard Command Handling ---
+
+chrome.commands.onCommand.addListener(async (command) => {
+  if (command !== 'toggle-play') return;
+
+  const state = await getState();
+  if (state.isPlaying) {
+    await stopPlayback(state);
+  } else {
+    await startPlayback(state);
+  }
+});
 
 // --- Auto-Resume on Chrome Startup ---
 
@@ -242,16 +283,23 @@ chrome.runtime.onStartup.addListener(async () => {
   }
 
   if (state.isPlaying) {
-    await ensureOffscreenDocument();
-    await sendToOffscreen({
-      type: 'AUDIO_PLAY',
-      payload: {
-        carrierFreq: state.carrierFreq,
-        beatFreq: state.beatFreq,
-        volume: state.volume
-      }
-    });
-    setBadgePlaying();
+    try {
+      await ensureOffscreenDocument();
+      await sendToOffscreen({
+        type: 'AUDIO_PLAY',
+        payload: {
+          carrierFreq: state.carrierFreq,
+          beatFreq: state.beatFreq,
+          volume: state.volume
+        }
+      });
+      setBadgePlaying();
+    } catch (e) {
+      // Auto-resume failed; don't show a green badge while nothing plays.
+      console.error('FocusWave: failed to auto-resume playback on startup', e);
+      await setState({ isPlaying: false });
+      return;
+    }
 
     // Recreate timer alarm if it was active
     if (state.timerEndTime) {

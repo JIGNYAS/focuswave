@@ -26,6 +26,9 @@ const stateFreq = document.getElementById('stateFreq');
 const stateLabel = document.getElementById('stateLabel');
 const canvas = document.getElementById('visualizer');
 const canvasCtx = canvas.getContext('2d');
+const paletteBtn      = document.getElementById('paletteBtn');
+const themePanel      = document.getElementById('themePanel');
+const swatchBtns      = document.querySelectorAll('.theme-swatch');
 
 // --- State ---
 let state = {
@@ -35,7 +38,8 @@ let state = {
   carrierFreq: 200,
   isPlaying: false,
   timerMinutes: 0,
-  timerEndTime: null
+  timerEndTime: null,
+  theme: 'dark'
 };
 
 let timerInterval = null;
@@ -47,12 +51,43 @@ function sendMessage(type, payload = {}) {
   return chrome.runtime.sendMessage({ type, payload });
 }
 
+// --- Theme ---
+function applyTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  state.theme = theme;
+  swatchBtns.forEach(btn => btn.classList.toggle('active', btn.dataset.theme === theme));
+}
+
+paletteBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  const opening = themePanel.classList.contains('hidden');
+  themePanel.classList.toggle('hidden', !opening);
+  paletteBtn.classList.toggle('active', opening);
+});
+
+themePanel.addEventListener('click', e => e.stopPropagation());
+
+document.addEventListener('click', () => {
+  themePanel.classList.add('hidden');
+  paletteBtn.classList.remove('active');
+});
+
+swatchBtns.forEach(btn => {
+  btn.addEventListener('click', async () => {
+    applyTheme(btn.dataset.theme);
+    themePanel.classList.add('hidden');
+    paletteBtn.classList.remove('active');
+    await sendMessage('SAVE_THEME', { theme: btn.dataset.theme });
+  });
+});
+
 // --- Initialize ---
 async function init() {
   const savedState = await sendMessage('GET_STATE');
   if (savedState) {
     state = { ...state, ...savedState };
   }
+  applyTheme(state.theme || 'dark');
   renderAll();
   startVisualizer();
 
@@ -126,12 +161,25 @@ presetBtns.forEach(btn => {
     const preset = btn.dataset.preset;
     if (preset === state.preset) return;
 
-    state.preset = preset;
     const info = PRESET_LABELS[preset];
-    state.beatFreq = parseFloat(info.hz);
+    if (!info) return;
+
+    const prevPreset = state.preset;
+    const prevBeatFreq = state.beatFreq;
+
+    // "2 Hz" -> 2 ; parse the leading number explicitly
+    state.preset = preset;
+    state.beatFreq = parseFloat(info.hz.match(/[\d.]+/)?.[0] ?? info.hz);
     renderPresets();
     renderStateDisplay();
-    await sendMessage('SET_PRESET', { preset });
+    try {
+      await sendMessage('SET_PRESET', { preset });
+    } catch (e) {
+      state.preset = prevPreset;
+      state.beatFreq = prevBeatFreq;
+      renderPresets();
+      renderStateDisplay();
+    }
   });
 });
 
@@ -140,45 +188,86 @@ playBtn.addEventListener('click', async () => {
   if (state.isPlaying) {
     state.isPlaying = false;
     renderPlayState();
-    await sendMessage('PAUSE');
+    try {
+      await sendMessage('PAUSE');
+    } catch (e) {
+      state.isPlaying = true;
+      renderPlayState();
+      return;
+    }
     stopTimerDisplay();
   } else {
     state.isPlaying = true;
     renderPlayState();
-    await sendMessage('PLAY');
+    try {
+      await sendMessage('PLAY');
+    } catch (e) {
+      state.isPlaying = false;
+      renderPlayState();
+      return;
+    }
     showHeadphoneNotice();
   }
 });
 
 // Volume slider
-volumeSlider.addEventListener('input', () => {
+volumeSlider.addEventListener('input', async () => {
+  const prevVolume = state.volume;
   const vol = parseInt(volumeSlider.value);
   state.volume = vol / 100;
   volumeValue.textContent = vol + '%';
-  sendMessage('SET_VOLUME', { volume: state.volume });
+  try {
+    await sendMessage('SET_VOLUME', { volume: state.volume });
+  } catch (e) {
+    state.volume = prevVolume;
+    renderSliders();
+  }
 });
 
 // Carrier frequency slider
-carrierSlider.addEventListener('input', () => {
+carrierSlider.addEventListener('input', async () => {
+  const prevCarrier = state.carrierFreq;
   const freq = parseInt(carrierSlider.value);
   state.carrierFreq = freq;
   carrierValue.textContent = freq + ' Hz';
-  sendMessage('SET_CARRIER', { carrierFreq: freq });
+  try {
+    await sendMessage('SET_CARRIER', { carrierFreq: freq });
+  } catch (e) {
+    state.carrierFreq = prevCarrier;
+    renderSliders();
+  }
 });
 
 // Timer buttons
 timerBtns.forEach(btn => {
   btn.addEventListener('click', async () => {
     const minutes = parseInt(btn.dataset.minutes);
+
+    const prevMinutes = state.timerMinutes;
+    const prevEndTime = state.timerEndTime;
     state.timerMinutes = minutes;
 
     if (minutes > 0) {
       state.timerEndTime = Date.now() + minutes * 60 * 1000;
-      await sendMessage('SET_TIMER', { minutes });
+      try {
+        await sendMessage('SET_TIMER', { minutes });
+      } catch (e) {
+        state.timerMinutes = prevMinutes;
+        state.timerEndTime = prevEndTime;
+        renderTimer();
+        return;
+      }
       startTimerDisplay();
     } else {
       state.timerEndTime = null;
-      await sendMessage('CLEAR_TIMER');
+      try {
+        await sendMessage('CLEAR_TIMER');
+      } catch (e) {
+        state.timerMinutes = prevMinutes;
+        state.timerEndTime = prevEndTime;
+        renderTimer();
+        return;
+      }
       stopTimerDisplay();
     }
 
@@ -247,6 +336,7 @@ function updateTimerCountdown() {
 
 // --- Sine Wave Visualizer ---
 let animationId = null;
+let canvasInitialized = false;
 
 function startVisualizer() {
   if (animationId) return;
@@ -254,17 +344,16 @@ function startVisualizer() {
 }
 
 function drawWave(timestamp) {
-  const width = canvas.width;
-  const height = canvas.height;
   const dpr = window.devicePixelRatio || 1;
 
-  // Handle DPR on first frame
-  if (canvas.width === 320) {
+  // Handle DPR setup exactly once
+  if (!canvasInitialized) {
     canvas.width = 320 * dpr;
     canvas.height = 56 * dpr;
     canvas.style.width = '320px';
     canvas.style.height = '56px';
     canvasCtx.scale(dpr, dpr);
+    canvasInitialized = true;
   }
 
   const w = 320;
@@ -272,42 +361,62 @@ function drawWave(timestamp) {
 
   canvasCtx.clearRect(0, 0, w, h);
 
-  // Draw sine wave
-  const amplitude = state.isPlaying ? (state.volume * h * 0.35 + 2) : 2;
-  const waveFreq = 0.04;
-  const speed = timestamp * 0.002;
+  // Resolve wave color from the active theme's CSS variables
+  const cs = getComputedStyle(document.documentElement);
+  const accent = (cs.getPropertyValue('--accent').trim() || '#ffc24d');
+  const accentRgb = (cs.getPropertyValue('--accent-rgb').trim() || '255,194,77');
 
-  // Glow effect
-  canvasCtx.shadowBlur = state.isPlaying ? 14 : 0;
-  canvasCtx.shadowColor = '#f5b942';
+  // Respect reduced motion
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Create gradient stroke
-  const gradient = canvasCtx.createLinearGradient(0, 0, w, 0);
-  gradient.addColorStop(0, '#f5b942');
-  gradient.addColorStop(0.5, '#a78bfa');
-  gradient.addColorStop(1, '#f5b942');
+  // Motion params: idle = near-flat barely-moving; playing = breathing wave
+  const speed = reduce ? 0 : timestamp * 0.0022;
+  const waveFreq = 0.045;
+  const amplitude = state.isPlaying ? (state.volume * h * 0.34 + 2) : 1.5;
+
+  // Faint baseline (always)
+  canvasCtx.shadowBlur = 0;
+  canvasCtx.beginPath();
+  canvasCtx.strokeStyle = 'rgba(' + accentRgb + ',0.10)';
+  canvasCtx.lineWidth = 1;
+  canvasCtx.moveTo(0, h / 2);
+  canvasCtx.lineTo(w, h / 2);
+  canvasCtx.stroke();
+
+  // Primary line: gradient that fades at both edges
+  const g = canvasCtx.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, 'rgba(' + accentRgb + ',0.35)');
+  g.addColorStop(0.5, accent);
+  g.addColorStop(1, 'rgba(' + accentRgb + ',0.35)');
 
   canvasCtx.beginPath();
-  canvasCtx.strokeStyle = gradient;
-  canvasCtx.lineWidth = state.isPlaying ? 2 : 1;
+  canvasCtx.strokeStyle = g;
+  canvasCtx.lineWidth = state.isPlaying ? 2 : 1.25;
+  canvasCtx.lineCap = 'round';
+  canvasCtx.lineJoin = 'round';
+  if (state.isPlaying) {
+    canvasCtx.shadowBlur = 10;
+    canvasCtx.shadowColor = 'rgba(' + accentRgb + ',0.55)';
+  } else {
+    canvasCtx.shadowBlur = 0;
+  }
 
   for (let x = 0; x <= w; x++) {
     const y = h / 2 + Math.sin(x * waveFreq + speed) * amplitude;
     if (x === 0) canvasCtx.moveTo(x, y);
     else canvasCtx.lineTo(x, y);
   }
-
   canvasCtx.stroke();
 
-  // Second wave (subtle, offset)
+  // Secondary line (only when playing): halved amplitude, slower drift
   if (state.isPlaying) {
-    canvasCtx.beginPath();
-    canvasCtx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
-    canvasCtx.lineWidth = 1;
     canvasCtx.shadowBlur = 0;
+    canvasCtx.beginPath();
+    canvasCtx.strokeStyle = 'rgba(' + accentRgb + ',0.18)';
+    canvasCtx.lineWidth = 1;
 
     for (let x = 0; x <= w; x++) {
-      const y = h / 2 + Math.sin(x * waveFreq * 1.3 + speed * 0.7) * amplitude * 0.5;
+      const y = h / 2 + Math.sin(x * waveFreq * 1.4 + speed * 0.65) * amplitude * 0.5;
       if (x === 0) canvasCtx.moveTo(x, y);
       else canvasCtx.lineTo(x, y);
     }
@@ -317,6 +426,34 @@ function drawWave(timestamp) {
   canvasCtx.shadowBlur = 0;
   animationId = requestAnimationFrame(drawWave);
 }
+
+// --- Sync with storage changes (e.g. timer completes while popup open) ---
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+
+  const relevant = ['isPlaying', 'timerEndTime', 'timerMinutes'];
+  let playChanged = false;
+  let timerChanged = false;
+
+  relevant.forEach(key => {
+    if (!(key in changes)) return;
+    const newValue = changes[key].newValue;
+    if (state[key] === newValue) return; // only react to actual changes
+    state[key] = newValue;
+    if (key === 'isPlaying') playChanged = true;
+    if (key === 'timerEndTime' || key === 'timerMinutes') timerChanged = true;
+  });
+
+  if (playChanged) renderPlayState();
+  if (timerChanged) {
+    if (state.timerEndTime && state.timerEndTime > Date.now()) {
+      startTimerDisplay();
+    } else {
+      stopTimerDisplay();
+    }
+    renderTimer();
+  }
+});
 
 // --- Init ---
 init();

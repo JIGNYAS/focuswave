@@ -1,24 +1,31 @@
-/* FocusWave — Welcome Page — Neural Observatory Theme */
+/* FocusWave — Welcome Page — Clarity Theme (dark-only) */
 
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500&display=swap');
+/* Self-hosted fonts (no runtime CDN dependency). Variable woff2 covers all weights. */
+@font-face {
+  font-family: 'Outfit';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('../fonts/outfit-latin.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 300 500;
+  font-display: swap;
+  src: url('../fonts/jetbrainsmono-latin.woff2') format('woff2');
+}
 
-:root {
-  --bg-deep: #06060e;
-  --bg-surface: #0b0b18;
-  --bg-elevated: rgba(255, 255, 255, 0.025);
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-active: rgba(245, 185, 66, 0.35);
-
-  --accent-gold: #f5b942;
-  --accent-amber: #e8943a;
-  --accent-violet: #a78bfa;
-  --accent-rose: #f472b6;
-
-  --text-primary: #e8e4df;
-  --text-secondary: rgba(232, 228, 223, 0.5);
-  --text-dim: rgba(232, 228, 223, 0.22);
-
-  --glow-gold: rgba(245, 185, 66, 0.25);
+:root{
+  --bg-deep:#0d0e14; --bg-surface:#16181f; --bg-elevated:#1c1f28; --bg-inset:#0a0b10;
+  --border-subtle:rgba(255,255,255,0.08); --border-strong:rgba(255,255,255,0.14);
+  --accent:#ffc24d; --accent-rgb:255,194,77; --accent-strong:#ffd27a; --accent-deep:#c8881f; --accent-ink:#1a1407;
+  --text-primary:#f4f3f0; --text-secondary:#b6b9c4; --text-tertiary:#8b8f9c; --text-dim:#6a6e7b;
+  --glow-accent:rgba(var(--accent-rgb),0.28);
+  --radius-sm:8px; --radius-md:12px; --radius-lg:18px; --radius-pill:999px;
+  --space-2:8px; --space-3:12px; --space-4:16px; --space-6:24px; --space-8:32px;
+  --shadow-1:0 1px 2px rgba(0,0,0,0.30); --shadow-2:0 4px 12px rgba(0,0,0,0.35); --shadow-3:0 12px 32px rgba(0,0,0,0.50);
+  --ease-out:cubic-bezier(0.22,1,0.36,1); --dur-base:200ms; --dur-slow:320ms;
 }
 
 * {
@@ -39,37 +46,6 @@ body {
   overflow-x: hidden;
 }
 
-/* Ambient orbs */
-body::before {
-  content: '';
-  position: fixed;
-  top: -30%;
-  left: -10%;
-  width: 120%;
-  height: 120%;
-  background:
-    radial-gradient(ellipse 45% 45% at 25% 25%, rgba(245, 185, 66, 0.07) 0%, transparent 70%),
-    radial-gradient(ellipse 35% 50% at 80% 75%, rgba(167, 139, 250, 0.06) 0%, transparent 70%),
-    radial-gradient(ellipse 50% 35% at 55% 15%, rgba(244, 114, 182, 0.03) 0%, transparent 70%);
-  pointer-events: none;
-  animation: ambient-drift 20s ease-in-out infinite alternate;
-}
-
-@keyframes ambient-drift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(-2%, 3%) scale(1.05); }
-}
-
-/* Grain */
-body::after {
-  content: '';
-  position: fixed;
-  inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
-  pointer-events: none;
-  opacity: 0.4;
-}
-
 .welcome-container {
   max-width: 740px;
   padding: 70px 40px;
@@ -79,38 +55,46 @@ body::after {
 }
 
 .welcome-header {
-  animation: header-fade-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: header-fade-in 0.8s var(--ease-out) both;
 }
 
 .welcome-title {
   font-family: 'Outfit', sans-serif;
-  font-size: 42px;
+  font-size: 30px;
   font-weight: 700;
-  letter-spacing: 10px;
-  background: linear-gradient(135deg, var(--accent-gold) 0%, var(--accent-amber) 40%, var(--accent-rose) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-  filter: drop-shadow(0 0 30px rgba(245, 185, 66, 0.15));
+  letter-spacing: 8px;
+  color: var(--text-primary);
+}
+
+.welcome-title::after {
+  content: '';
+  display: block;
+  width: 40px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  margin: 12px auto 0;
 }
 
 .welcome-subtitle {
-  font-size: 13px;
-  color: var(--text-dim);
-  letter-spacing: 4px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 10px;
+  color: var(--text-tertiary);
+  letter-spacing: 1.6px;
   text-transform: uppercase;
-  margin-top: 8px;
-  font-weight: 300;
+  margin-top: var(--space-4);
+  font-weight: 600;
 }
 
 .welcome-heading {
-  font-size: 18px;
-  font-weight: 300;
+  font-family: 'Outfit', sans-serif;
+  font-size: 16px;
+  font-weight: 600;
   color: var(--text-secondary);
   margin-top: 56px;
   margin-bottom: 40px;
-  letter-spacing: 1px;
-  animation: header-fade-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+  letter-spacing: 0.3px;
+  animation: header-fade-in 0.8s var(--ease-out) 0.15s both;
 }
 
 .steps {
@@ -122,36 +106,19 @@ body::after {
 .step-card {
   background: var(--bg-elevated);
   border: 1px solid var(--border-subtle);
-  border-radius: 20px;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-1);
   padding: 36px 28px 30px;
   flex: 1;
   max-width: 210px;
   position: relative;
-  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s ease, border-color 0.4s ease;
-  overflow: hidden;
-}
-
-/* Inner light sweep on hover */
-.step-card::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(135deg, rgba(245, 185, 66, 0.04) 0%, transparent 40%, rgba(167, 139, 250, 0.03) 100%);
-  opacity: 0;
-  transition: opacity 0.4s ease;
-  pointer-events: none;
+  transition: transform var(--dur-slow) var(--ease-out), box-shadow var(--dur-slow) var(--ease-out), border-color var(--dur-slow) var(--ease-out);
 }
 
 .step-card:hover {
   transform: translateY(-6px);
-  box-shadow:
-    0 12px 40px rgba(245, 185, 66, 0.08),
-    0 0 80px rgba(167, 139, 250, 0.04);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.step-card:hover::before {
-  opacity: 1;
+  box-shadow: var(--shadow-3);
+  border-color: var(--border-strong);
 }
 
 .step-number {
@@ -162,53 +129,56 @@ body::after {
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--accent-gold), var(--accent-amber));
+  background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 13px;
   font-weight: 700;
-  color: var(--bg-deep);
-  box-shadow: 0 0 20px rgba(245, 185, 66, 0.3);
+  color: var(--accent-ink);
+  box-shadow: var(--shadow-1);
 }
 
 .step-icon {
-  color: var(--accent-gold);
+  color: var(--accent);
   margin: 16px 0 20px;
-  filter: drop-shadow(0 0 12px rgba(245, 185, 66, 0.2));
+  filter: drop-shadow(0 0 8px var(--glow-accent));
 }
 
 .step-title {
-  font-size: 16px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 15px;
   font-weight: 600;
+  color: var(--text-primary);
   margin-bottom: 10px;
   letter-spacing: 0.3px;
 }
 
 .step-desc {
+  font-family: 'Outfit', sans-serif;
   font-size: 13px;
   color: var(--text-secondary);
   line-height: 1.6;
-  font-weight: 300;
+  font-weight: 400;
 }
 
 .welcome-footer {
   margin-top: 56px;
   font-size: 14px;
-  color: var(--text-dim);
-  font-weight: 300;
+  color: var(--text-tertiary);
+  font-weight: 400;
   letter-spacing: 0.3px;
-  animation: header-fade-in 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.6s both;
+  animation: header-fade-in 0.8s var(--ease-out) 0.6s both;
 }
 
 .welcome-footer strong {
-  color: var(--accent-gold);
-  font-weight: 500;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 /* ─── Staggered card entrance ─── */
 .step-card {
-  animation: card-rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation: card-rise 0.7s var(--ease-out) forwards;
   opacity: 0;
 }
 
@@ -254,7 +224,16 @@ body::after {
   }
 
   .welcome-title {
-    font-size: 30px;
+    font-size: 26px;
     letter-spacing: 6px;
+  }
+}
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
   }
 }
