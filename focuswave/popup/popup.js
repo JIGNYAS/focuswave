@@ -510,42 +510,62 @@ function drawWave(timestamp) {
 
   canvasCtx.clearRect(0, 0, w, h);
 
-  // Draw sine wave
-  const amplitude = state.isPlaying ? (state.volume * h * 0.35 + 2) : 2;
-  const waveFreq = 0.04;
-  const speed = timestamp * 0.002;
+  // Resolve wave color from the active theme's CSS variables
+  const cs = getComputedStyle(document.documentElement);
+  const accent = (cs.getPropertyValue('--accent').trim() || '#ffc24d');
+  const accentRgb = (cs.getPropertyValue('--accent-rgb').trim() || '255,194,77');
 
-  // Glow effect
-  canvasCtx.shadowBlur = state.isPlaying ? 14 : 0;
-  canvasCtx.shadowColor = '#f5b942';
+  // Respect reduced motion
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // Create gradient stroke
-  const gradient = canvasCtx.createLinearGradient(0, 0, w, 0);
-  gradient.addColorStop(0, '#f5b942');
-  gradient.addColorStop(0.5, '#a78bfa');
-  gradient.addColorStop(1, '#f5b942');
+  // Motion params: idle = near-flat barely-moving; playing = breathing wave
+  const speed = reduce ? 0 : timestamp * 0.0022;
+  const waveFreq = 0.045;
+  const amplitude = state.isPlaying ? (state.volume * h * 0.34 + 2) : 1.5;
+
+  // Faint baseline (always)
+  canvasCtx.shadowBlur = 0;
+  canvasCtx.beginPath();
+  canvasCtx.strokeStyle = 'rgba(' + accentRgb + ',0.10)';
+  canvasCtx.lineWidth = 1;
+  canvasCtx.moveTo(0, h / 2);
+  canvasCtx.lineTo(w, h / 2);
+  canvasCtx.stroke();
+
+  // Primary line: gradient that fades at both edges
+  const g = canvasCtx.createLinearGradient(0, 0, w, 0);
+  g.addColorStop(0, 'rgba(' + accentRgb + ',0.35)');
+  g.addColorStop(0.5, accent);
+  g.addColorStop(1, 'rgba(' + accentRgb + ',0.35)');
 
   canvasCtx.beginPath();
-  canvasCtx.strokeStyle = gradient;
-  canvasCtx.lineWidth = state.isPlaying ? 2 : 1;
+  canvasCtx.strokeStyle = g;
+  canvasCtx.lineWidth = state.isPlaying ? 2 : 1.25;
+  canvasCtx.lineCap = 'round';
+  canvasCtx.lineJoin = 'round';
+  if (state.isPlaying) {
+    canvasCtx.shadowBlur = 10;
+    canvasCtx.shadowColor = 'rgba(' + accentRgb + ',0.55)';
+  } else {
+    canvasCtx.shadowBlur = 0;
+  }
 
   for (let x = 0; x <= w; x++) {
     const y = h / 2 + Math.sin(x * waveFreq + speed) * amplitude;
     if (x === 0) canvasCtx.moveTo(x, y);
     else canvasCtx.lineTo(x, y);
   }
-
   canvasCtx.stroke();
 
-  // Second wave (subtle, offset)
+  // Secondary line (only when playing): halved amplitude, slower drift
   if (state.isPlaying) {
-    canvasCtx.beginPath();
-    canvasCtx.strokeStyle = 'rgba(167, 139, 250, 0.2)';
-    canvasCtx.lineWidth = 1;
     canvasCtx.shadowBlur = 0;
+    canvasCtx.beginPath();
+    canvasCtx.strokeStyle = 'rgba(' + accentRgb + ',0.18)';
+    canvasCtx.lineWidth = 1;
 
     for (let x = 0; x <= w; x++) {
-      const y = h / 2 + Math.sin(x * waveFreq * 1.3 + speed * 0.7) * amplitude * 0.5;
+      const y = h / 2 + Math.sin(x * waveFreq * 1.4 + speed * 0.65) * amplitude * 0.5;
       if (x === 0) canvasCtx.moveTo(x, y);
       else canvasCtx.lineTo(x, y);
     }
