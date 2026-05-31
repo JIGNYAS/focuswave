@@ -31,16 +31,9 @@ Five brainwave presets, each tuned to a target beat frequency and use case:
 
 Six color themes: **Dark**, **Light**, **Midnight**, **Forest**, **Sunset**, and **Ocean**.
 
-### Free vs Pro
+### Everything is free
 
-| | Free | Pro |
-|---|------|-----|
-| Presets | Alpha, Beta | All five (adds Delta, Theta, Gamma) |
-| Timers | 15m, 25m | All durations (adds 45m, 60m) |
-| Carrier frequency control | — | Yes (150–300 Hz) |
-| Themes & visualizer | Yes | Yes |
-
-Pro is unlocked with a license key that is validated locally on your device.
+Every feature is unlocked for everyone — all five presets, all timer durations, full carrier-frequency control, and all themes. No accounts, no purchases, no license keys.
 
 ## Install (Development)
 

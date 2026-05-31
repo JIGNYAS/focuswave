@@ -21,7 +21,6 @@ To remember your preferences between sessions, FocusWave saves a small set of se
 - Carrier frequency
 - Timer setting
 - Selected color theme
-- Pro license key (if you have entered one)
 
 You can clear this data at any time by removing the extension from Chrome.
 
@@ -33,15 +32,11 @@ FocusWave uses **no** analytics, **no** tracking, **no** cookies, and **no** thi
 
 FocusWave has no backend and makes **no external network requests whatsoever**. All fonts (Outfit and JetBrains Mono) are bundled with the extension and served locally from within it via local `@font-face` declarations — there is no Google Fonts request and no other external request of any kind. No CDN, no third-party servers, and no analytics endpoints are ever contacted.
 
-## Pro License
-
-The Pro license key is validated **locally, on your device**. Validating or activating Pro does not contact any server and does not transmit your key or any other information anywhere.
-
 ## Permissions
 
 FocusWave requests only the minimum permissions needed to function. None of these grant access to your browsing data, history, or the content of any web page.
 
-- **`storage`** — Saves your preferences (preset, volume, carrier frequency, timer, theme, and Pro license key) locally so they persist between sessions.
+- **`storage`** — Saves your preferences (preset, volume, carrier frequency, timer, and theme) locally so they persist between sessions.
 - **`offscreen`** — Creates an offscreen document that runs the Web Audio engine, so your binaural beats keep playing even when the popup is closed or you switch tabs.
 - **`alarms`** — Powers the focus/session timer, allowing the extension to reliably count down and stop playback when time is up.
 
